@@ -2,9 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
 const env = process.env.NODE_ENV || "development";
 const config = require("./config/" + env + ".js");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -29,7 +30,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Plugins and middlewares
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ["password"] });
 
 // Creating model
 const User = mongoose.model("User", userSchema);
@@ -53,12 +53,18 @@ app.post("/register", function (req, res) {
             res.send(err);
         } else {
             if (!user) {
-                const user = new User({
-                    username: req.body.username,
-                    password: req.body.password
-                });
-                user.save(function (err) {
-                    err ? res.send(err) : res.render("secrets");
+                bcrypt.hash(req.body.password, saltRounds, function (err, hash) {
+                    if (err) {
+                        res.send(err);
+                    } else {
+                        const user = new User({
+                            username: req.body.username,
+                            password: hash
+                        });
+                        user.save(function (err) {
+                            err ? res.send(err) : res.render("secrets");
+                        })
+                    }
                 })
             } else {
                 console.log("Error: Username already existed.")
@@ -74,10 +80,16 @@ app.post("/login", function (req, res) {
             res.send(err);
         } else {
             if (user) {
-                if (user.password === req.body.password) {
-                    res.render("secrets");
-                }
+                bcrypt.compare(req.body.password, user.password, function (err, result) {
+                    if (result) {
+                        res.render("secrets");
+                    }
+                })
             }
         }
     })
+})
+
+app.get("/logout", function (req, res) {
+    res.render("home");
 })
